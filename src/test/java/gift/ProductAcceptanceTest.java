@@ -1,6 +1,7 @@
 package gift;
 
 import io.restassured.RestAssured;
+import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -8,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.annotation.DirtiesContext;
+
+import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.hasItems;
@@ -33,10 +36,12 @@ class ProductAcceptanceTest {
         Long categoryId = 카테고리를_생성한다("교환권");
 
         given()
-                .param("name", "아메리카노")
-                .param("price", 5000)
-                .param("imageUrl", "http://img.com/a.jpg")
-                .param("categoryId", categoryId)
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "name", "아메리카노",
+                        "price", 5000,
+                        "imageUrl", "http://img.com/a.jpg",
+                        "categoryId", categoryId))
         .when()
                 .post("/api/products")
         .then()
@@ -80,7 +85,8 @@ class ProductAcceptanceTest {
 
     private Long 카테고리를_생성한다(String name) {
         Response response = given()
-                .param("name", name)
+                .contentType(ContentType.JSON)
+                .body(Map.of("name", name))
         .when()
                 .post("/api/categories")
         .then()
@@ -91,10 +97,12 @@ class ProductAcceptanceTest {
 
     private void 상품을_등록한다(String name, int price, String imageUrl, Long categoryId) {
         given()
-                .param("name", name)
-                .param("price", price)
-                .param("imageUrl", imageUrl)
-                .param("categoryId", categoryId)
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "name", name,
+                        "price", price,
+                        "imageUrl", imageUrl,
+                        "categoryId", categoryId))
         .when()
                 .post("/api/products")
         .then()

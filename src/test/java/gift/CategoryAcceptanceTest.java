@@ -1,12 +1,15 @@
 package gift;
 
 import io.restassured.RestAssured;
+import io.restassured.http.ContentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.annotation.DirtiesContext;
+
+import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.hasItems;
@@ -30,7 +33,8 @@ class CategoryAcceptanceTest {
     @DisplayName("유효한 이름으로 카테고리를 생성하면 id와 name이 반환된다")
     void createCategory() {
         given()
-                .param("name", "교환권")
+                .contentType(ContentType.JSON)
+                .body(Map.of("name", "교환권"))
         .when()
                 .post("/api/categories")
         .then()
@@ -70,7 +74,8 @@ class CategoryAcceptanceTest {
 
     private void 카테고리를_생성한다(String name) {
         given()
-                .param("name", name)
+                .contentType(ContentType.JSON)
+                .body(Map.of("name", name))
         .when()
                 .post("/api/categories")
         .then()
