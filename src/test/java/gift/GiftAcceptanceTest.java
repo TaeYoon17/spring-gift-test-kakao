@@ -8,125 +8,116 @@ import gift.model.Option;
 import gift.model.OptionRepository;
 import gift.model.Product;
 import gift.model.ProductRepository;
-import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.util.Map;
 
 import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.emptyOrNullString;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class GiftAcceptanceTest {
-
-    @LocalServerPort
-    int port;
+class GiftAcceptanceTest extends AcceptanceTestBase {
 
     @Autowired
-    JdbcTemplate jdbcTemplate;
+    private MemberRepository memberRepository;
 
     @Autowired
-    MemberRepository memberRepository;
+    private CategoryRepository categoryRepository;
 
     @Autowired
-    CategoryRepository categoryRepository;
+    private ProductRepository productRepository;
 
     @Autowired
-    ProductRepository productRepository;
-
-    @Autowired
-    OptionRepository optionRepository;
-
-    @BeforeEach
-    void setUp() {
-        RestAssured.port = port;
-        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE");
-        jdbcTemplate.execute("TRUNCATE TABLE wish");
-        jdbcTemplate.execute("TRUNCATE TABLE option");
-        jdbcTemplate.execute("TRUNCATE TABLE product");
-        jdbcTemplate.execute("TRUNCATE TABLE category");
-        jdbcTemplate.execute("TRUNCATE TABLE member");
-        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE");
-    }
+    private OptionRepository optionRepository;
 
     @Test
-    @DisplayName("유효한 선물 요청 시 성공한다")
-    void giveGift() {
-        Long senderId = memberRepository.save(new Member("보내는사람", "sender@test.com")).getId();
-        Long receiverId = memberRepository.save(new Member("받는사람", "receiver@test.com")).getId();
-        Long optionId = 옵션을_셋업한다("옵션A", 10);
+    @DisplayName("선물하기 성공 시 200 응답과 함께 재고가 차감된다")
+    void giveGiftSuccess() {
+        // given
+        Member sender = memberRepository.save(new Member("보내는사람", "sender@test.com"));
+        Member receiver = memberRepository.save(new Member("받는사람", "receiver@test.com"));
+        Category category = categoryRepository.save(new Category("식품"));
+        Product product = productRepository.save(
+                new Product("아이스크림", 3000, "http://example.com/ice.png", category)
+        );
+        Option option = optionRepository.save(new Option("Tall", 10, product));
 
+        // when
         given()
                 .contentType(ContentType.JSON)
-                .header("Member-Id", senderId)
-                .body("""
-                    {"optionId": %d, "quantity": 1, "receiverId": %d, "message": "생일 축하해"}
-                    """.formatted(optionId, receiverId))
+                .header("Member-Id", sender.getId())
+                .body(Map.of(
+                        "optionId", option.getId(),
+                        "quantity", 3,
+                        "receiverId", receiver.getId(),
+                        "message", "맛있게 먹어!"
+                ))
         .when()
                 .post("/api/gifts")
         .then()
-                .statusCode(200);
+                .statusCode(200)
+                .body(emptyOrNullString());
+
+        // then — DB 상태 검증
+        Option updated = optionRepository.findById(option.getId()).orElseThrow();
+        assertThat(updated.getQuantity()).isEqualTo(7); // 10 - 3
     }
 
     @Test
-    @DisplayName("재고 전량 선물 후 추가 선물 시 실패한다")
-    void giveGiftExceedingStock() {
-        Long senderId = memberRepository.save(new Member("보내는사람", "sender@test.com")).getId();
-        Long receiverId = memberRepository.save(new Member("받는사람", "receiver@test.com")).getId();
-        Long optionId = 옵션을_셋업한다("옵션A", 10);
+    @DisplayName("재고 부족 시 선물하기가 실패(500)하고 재고가 변경되지 않는다")
+    void giveGiftFailsWhenInsufficientStock() {
+        // given
+        Member sender = memberRepository.save(new Member("보내는사람", "sender@test.com"));
+        Member receiver = memberRepository.save(new Member("받는사람", "receiver@test.com"));
+        Category category = categoryRepository.save(new Category("식품"));
+        Product product = productRepository.save(
+                new Product("아이스크림", 3000, "http://example.com/ice.png", category)
+        );
+        Option option = optionRepository.save(new Option("Tall", 1, product));
 
-        선물을_보낸다(senderId, optionId, 10, receiverId, "첫 번째 선물");
-
+        // when
         given()
                 .contentType(ContentType.JSON)
-                .header("Member-Id", senderId)
-                .body("""
-                    {"optionId": %d, "quantity": 1, "receiverId": %d, "message": "두 번째 선물"}
-                    """.formatted(optionId, receiverId))
+                .header("Member-Id", sender.getId())
+                .body(Map.of(
+                        "optionId", option.getId(),
+                        "quantity", 2,
+                        "receiverId", receiver.getId(),
+                        "message", "선물!"
+                ))
         .when()
                 .post("/api/gifts")
         .then()
                 .statusCode(500);
+
+        // then — 트랜잭션 롤백 확인
+        Option updated = optionRepository.findById(option.getId()).orElseThrow();
+        assertThat(updated.getQuantity()).isEqualTo(1); // 변경 없음
     }
 
     @Test
-    @DisplayName("존재하지 않는 옵션으로 선물 시 실패한다")
-    void giveGiftWithInvalidOption() {
-        Long senderId = memberRepository.save(new Member("보내는사람", "sender@test.com")).getId();
-        Long receiverId = memberRepository.save(new Member("받는사람", "receiver@test.com")).getId();
+    @DisplayName("존재하지 않는 옵션으로 선물하기가 실패(500)한다")
+    void giveGiftFailsWhenOptionNotFound() {
+        // given
+        Member sender = memberRepository.save(new Member("보내는사람", "sender@test.com"));
+        Member receiver = memberRepository.save(new Member("받는사람", "receiver@test.com"));
 
+        // when & then
         given()
                 .contentType(ContentType.JSON)
-                .header("Member-Id", senderId)
-                .body("""
-                    {"optionId": 9999, "quantity": 1, "receiverId": %d, "message": "선물"}
-                    """.formatted(receiverId))
+                .header("Member-Id", sender.getId())
+                .body(Map.of(
+                        "optionId", 999,
+                        "quantity", 1,
+                        "receiverId", receiver.getId(),
+                        "message", "선물!"
+                ))
         .when()
                 .post("/api/gifts")
         .then()
                 .statusCode(500);
-    }
-
-    private Long 옵션을_셋업한다(String name, int quantity) {
-        Category category = categoryRepository.save(new Category("교환권"));
-        Product product = productRepository.save(new Product("아메리카노", 5000, "http://img.com/a.jpg", category));
-        return optionRepository.save(new Option(name, quantity, product)).getId();
-    }
-
-    private void 선물을_보낸다(Long senderId, Long optionId, int quantity, Long receiverId, String message) {
-        given()
-                .contentType(ContentType.JSON)
-                .header("Member-Id", senderId)
-                .body("""
-                    {"optionId": %d, "quantity": %d, "receiverId": %d, "message": "%s"}
-                    """.formatted(optionId, quantity, receiverId, message))
-        .when()
-                .post("/api/gifts")
-        .then()
-                .statusCode(200);
     }
 }
