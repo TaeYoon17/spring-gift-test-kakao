@@ -283,11 +283,91 @@ testImplementation 'io.rest-assured:rest-assured'
 
 ---
 
-## 6. 향후 개선 방향
+## 6. Cucumber (Gherkin) 도입 — High Risk 시나리오
+
+### 도입 배경
+
+기존 RestAssured 코드는 개발자만 읽을 수 있다. **Risk = Impact x Likelihood x Detection Cost** 기준으로
+High Risk(>= 12) 시나리오만 Cucumber 자동화하여 비즈니스 담당자도 읽을 수 있는 테스트로 전환한다.
+
+### 적용 범위
+
+| 시나리오 | Risk | Cucumber | 근거 |
+|---------|------|----------|------|
+| 선물하기 성공 (재고 차감) | **High (15)** | ✅ | 핵심 비즈니스 + 데이터 정합성 |
+| 재고 부족 선물 실패 | **High (15)** | ✅ | 과매도 방지 + 트랜잭션 롤백 |
+| 옵션 미존재 선물 실패 | **High (12)** | ✅ | 방어 로직 |
+| 카테고리/상품 CRUD | Medium (6-8) | ❌ | RestAssured JUnit 유지 |
+
+### 구조
+
+```
+src/test/resources/features/gift.feature       # 한국어 Gherkin (# language: ko)
+src/test/java/gift/cucumber/
+├── CucumberSpringConfiguration.java           # @CucumberContextConfiguration + @MockBean
+├── CucumberSuiteTest.java                     # @Suite + @IncludeEngines("cucumber")
+├── ScenarioContext.java                       # @ScenarioScope — Step 간 상태 공유
+├── DatabaseCleanerHook.java                   # Cucumber @Before — DB truncate
+├── RestAssuredHook.java                       # Cucumber @Before — RestAssured 포트 설정
+└── steps/
+    ├── CommonSteps.java                       # 공통 응답 검증
+    └── GiftSteps.java                         # 선물하기 Steps + Mock 검증
+```
+
+### 실행
+
+```bash
+./gradlew test                                    # JUnit + Cucumber 동시 실행
+```
+
+리포트: `build/reports/cucumber/cucumber-report.html`
+
+---
+
+## 7. 테스트 더블 전략 — GiftDelivery 격리
+
+### 문제
+
+`FakeGiftDelivery`는 `MemberRepository.findById()`를 호출하여 비즈니스 로직 테스트와 무관한 외부 의존이 발생한다.
+
+### 해결
+
+`@MockBean GiftDelivery`로 `FakeGiftDelivery`를 대체한다.
+
+| 적용 위치 | 방식 |
+|----------|------|
+| `CucumberSpringConfiguration` | `@MockBean GiftDelivery` |
+| `GiftAcceptanceTest` | `@MockBean GiftDelivery` |
+
+### 검증 항목
+
+- 성공 시: `verify(giftDelivery, times(1)).deliver(any())` — 배달 호출됨
+- 실패 시: `verify(giftDelivery, never()).deliver(any())` — 배달 미호출
+
+프로덕션 코드(`FakeGiftDelivery`) 변경 없음.
+
+---
+
+## 8. 테스트 격리 — @DirtiesContext → JdbcTemplate truncate
+
+### 변경 사항
+
+- `@DirtiesContext(AFTER_EACH_TEST_METHOD)` 제거
+- `@BeforeEach`에서 `JdbcTemplate`으로 전 테이블 TRUNCATE
+- `@ActiveProfiles("test")`로 `application-test.properties` 활성화
+
+### 이유
+
+- `@DirtiesContext`는 매 테스트마다 ApplicationContext를 재생성하여 느림
+- TRUNCATE 방식은 컨텍스트를 공유하면서 데이터만 초기화
+
+---
+
+## 9. 향후 개선 방향
 
 - `@ControllerAdvice` 추가 → 에러 상태 코드 세분화 (500 → 404/400/409)
 - `@Valid` 추가 → 유효성 검증 테스트
-- 테스트 증가 → `@DirtiesContext` → `@Sql` truncate 전환
+- 낙관적/비관적 락 도입 → 동시성 테스트 (AC-GFT-05 자동화 승격)
 
 ### 변경 트리거 규칙
 
