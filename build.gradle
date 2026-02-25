@@ -21,15 +21,22 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	runtimeOnly 'com.h2database:h2'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-docker-compose'
 	testImplementation 'io.rest-assured:rest-assured'
 	testImplementation 'io.cucumber:cucumber-java:7.20.1'
 	testImplementation 'io.cucumber:cucumber-spring:7.20.1'
 	testImplementation 'io.cucumber:cucumber-junit-platform-engine:7.20.1'
 	testImplementation 'org.junit.platform:junit-platform-suite'
+	runtimeOnly 'org.postgresql:postgresql'
 }
 
 tasks.named('test') {
+	useJUnitPlatform()
+}
+
+tasks.register('cucumberTest', Test) {
+	description = 'Runs Cucumber BDD tests with PostgreSQL via Docker Compose'
+	group = 'verification'
 	useJUnitPlatform()
 }

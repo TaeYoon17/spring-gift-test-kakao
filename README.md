@@ -4,6 +4,7 @@
 
 - Java 21
 - Gradle 8.4 (wrapper 포함)
+- Docker (Docker Desktop 또는 Docker Engine)
 
 ## 빌드
 
@@ -23,6 +24,14 @@
 
 ```bash
 ./gradlew test
+```
+
+### Cucumber BDD 테스트 (PostgreSQL)
+
+Docker가 실행 중이어야 한다. Spring Boot Docker Compose 모듈이 PostgreSQL 컨테이너를 자동으로 시작/종료한다.
+
+```bash
+./gradlew cucumberTest
 ```
 
 ### Cucumber 시나리오 구조
@@ -46,3 +55,9 @@
 ```
 build/reports/cucumber/cucumber-report.html
 ```
+
+### 트러블슈팅
+
+- **Docker 미실행 시 테스트 실패**: Docker Desktop이 실행 중인지 확인한다.
+- **포트 충돌**: `docker-compose.yml`에서 PostgreSQL은 호스트 포트 `15432`를 사용한다. 해당 포트가 사용 중이면 변경한다.
+- **컨테이너 수동 정리**: `docker compose down` 명령으로 남은 컨테이너를 정리할 수 있다.

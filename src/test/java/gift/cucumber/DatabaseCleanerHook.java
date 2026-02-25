@@ -11,12 +11,8 @@ public class DatabaseCleanerHook {
 
     @Before(order = 0)
     public void cleanDatabase() {
-        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE");
-        jdbcTemplate.execute("TRUNCATE TABLE wish");
-        jdbcTemplate.execute("TRUNCATE TABLE option");
-        jdbcTemplate.execute("TRUNCATE TABLE product");
-        jdbcTemplate.execute("TRUNCATE TABLE category");
-        jdbcTemplate.execute("TRUNCATE TABLE member");
-        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE");
+        jdbcTemplate.execute(
+            "TRUNCATE TABLE wish, option, product, category, member RESTART IDENTITY CASCADE"
+        );
     }
 }
